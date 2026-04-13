@@ -3,3 +3,4 @@ yfinance>=0.2
 scikit-learn>=1.4
 pandas>=2.0
 numpy>=1.26
+gunicorn>=21.2
