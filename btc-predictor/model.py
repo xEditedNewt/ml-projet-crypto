@@ -97,14 +97,52 @@ def predict_today_and_history(df_feat, model, scaler, n_history=5):
     X_hist = scaler.transform(hist_slice[FEATURES].values)
     pred_hist = model.predict(X_hist)
 
+    # Next-day close needed to compute actual return
+    # df_known row i has Close[i], and y[i] = 1 iff Close[i+1] > Close[i]
+    # We need Close[i+1] — grab it from df_feat aligned by index
+    hist_indices = hist_slice.index.tolist()
+
     history = []
-    for i, (_, row) in enumerate(hist_slice.iterrows()):
+    for i, (idx, row) in enumerate(hist_slice.iterrows()):
+        # Find next row in df_feat to get actual next close
+        next_rows = df_feat[df_feat.index == idx + 1]
+        if len(next_rows) == 0:
+            # fallback: look by position in df_known
+            pos = df_known.index.get_loc(idx)
+            if pos + 1 < len(df_known):
+                next_close = float(df_known.iloc[pos + 1]['Close'])
+            else:
+                next_close = None
+        else:
+            next_close = float(next_rows.iloc[0]['Close'])
+
+        close = float(row['Close'])
+        # Daily return: (next_close - close) / close
+        if next_close is not None:
+            daily_return = (next_close - close) / close  # e.g. 0.025 = +2.5%
+        else:
+            daily_return = None
+
+        # Gain on 100€ bet:
+        # LONG  (predicted up)   → gain = 100 * daily_return
+        # SHORT (predicted down) → gain = 100 * (-daily_return)
+        predicted = int(pred_hist[i])
+        if daily_return is not None:
+            direction = 1 if predicted == 1 else -1
+            gain_eur = round(100 * direction * daily_return, 2)
+        else:
+            gain_eur = None
+
         history.append({
             'date':         row['Date'].strftime('%d/%m/%Y'),
-            'close':        round(float(row['Close']), 2),
+            'close':        round(close, 2),
+            'next_close':   round(next_close, 2) if next_close else None,
+            'daily_return': round(daily_return * 100, 3) if daily_return is not None else None,
             'actual_up':    int(row['y']),
-            'predicted_up': int(pred_hist[i]),
-            'correct':      int(pred_hist[i] == row['y']),
+            'predicted_up': predicted,
+            'correct':      int(predicted == row['y']),
+            'gain_eur':     gain_eur,
+            'position':     'LONG' if predicted == 1 else 'SHORT',
         })
 
     # Today's prediction (last row in df_all — no known y yet)

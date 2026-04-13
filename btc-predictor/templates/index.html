@@ -168,11 +168,14 @@
     }
     .day-chip.win  { background: var(--green-bg); border-color: var(--green-border); }
     .day-chip.loss { background: var(--red-bg);   border-color: var(--red-border); }
-    .day-chip-date  { font-size: .65rem; color: var(--muted); margin-bottom: 4px; }
-    .day-chip-gain  { font-size: .85rem; font-weight: 700; }
+    .day-chip-date  { font-size: .63rem; color: var(--muted); margin-bottom: 3px; }
+    .day-chip-pos   { font-size: .68rem; font-weight: 600; margin-bottom: 5px; opacity: .85; }
+    .day-chip.win  .day-chip-pos  { color: var(--green); }
+    .day-chip.loss .day-chip-pos  { color: var(--red); }
+    .day-chip-gain  { font-size: .9rem; font-weight: 700; }
     .day-chip.win  .day-chip-gain { color: var(--green); }
     .day-chip.loss .day-chip-gain { color: var(--red); }
-    .day-chip-icon  { font-size: .75rem; margin-top: 2px; }
+    .day-chip-ret   { font-size: .65rem; color: var(--muted); margin-top: 3px; }
 
     /* ── History table ── */
     .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
@@ -278,24 +281,27 @@
       const signalClass = isUnknown ? 'unknown' : (isUp ? 'up' : 'down');
       const signalText  = isUnknown ? '— Inconnu' : (isUp ? '↑ Hausse prévue' : '↓ Baisse prévue');
 
-      // ── Gain simulation (100 € / jour)
-      const BET = 100;
+      // ── Gain simulation réel (100 € / jour, rendement BTC réel)
+      const fmtGain = v => (v >= 0 ? '+' : '') + v.toFixed(2) + ' €';
       let totalGain = 0;
       const chips = data.history.map(h => {
-        const gain = h.correct ? +BET : -BET;
-        totalGain += gain;
-        const d = h.date.slice(0, 5); // "DD/MM"
+        const g = h.gain_eur ?? 0;
+        totalGain += g;
+        const d = h.date.slice(0, 5);
+        const isPos = g >= 0;
+        const posLabel = h.position === 'LONG' ? '↑ Long' : '↓ Short';
         return `
-          <div class="day-chip ${h.correct ? 'win' : 'loss'}">
+          <div class="day-chip ${isPos ? 'win' : 'loss'}">
             <div class="day-chip-date">${d}</div>
-            <div class="day-chip-gain">${gain > 0 ? '+' : ''}${fmtEUR.format(gain)}</div>
-            <div class="day-chip-icon">${h.correct ? '✓' : '✗'}</div>
+            <div class="day-chip-pos">${posLabel}</div>
+            <div class="day-chip-gain">${fmtGain(g)}</div>
+            <div class="day-chip-ret">${h.daily_return >= 0 ? '+' : ''}${h.daily_return}%</div>
           </div>`;
       }).join('');
 
       const correctCount = data.history.filter(h => h.correct).length;
-      const gainClass    = totalGain > 0 ? 'pos' : totalGain < 0 ? 'neg' : 'zero';
-      const gainSign     = totalGain > 0 ? '+' : '';
+      totalGain = Math.round(totalGain * 100) / 100;
+      const gainClass = totalGain > 0 ? 'pos' : totalGain < 0 ? 'neg' : 'zero';
 
       // ── History rows
       const histRows = data.history.map(h => `
@@ -337,8 +343,8 @@
             <div class="card-label">Simulation — 100 € misés par jour</div>
             <div class="gain-top">
               <div>
-                <div class="gain-amount ${gainClass}">${gainSign}${fmtEUR.format(totalGain)}</div>
-                <div class="gain-sub">gain net sur les 5 derniers jours</div>
+                <div class="gain-amount ${gainClass}">${fmtGain(totalGain)}</div>
+                <div class="gain-sub">gain net sur les 5 derniers jours · 100 € / jour</div>
               </div>
               <div class="gain-accuracy">
                 <div class="accuracy-ring">${correctCount}/5</div>
