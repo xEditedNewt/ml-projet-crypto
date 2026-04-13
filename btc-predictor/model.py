@@ -43,8 +43,9 @@ def build_features(df):
 
     data['vol_norm'] = data['Volume'] / data['Volume'].rolling(20).mean()
 
-    # Target : 1 if price goes up tomorrow
+    # Target : 1 if price goes up tomorrow (NaN for the last row — no next day)
     data['y'] = (data['Close'].shift(-1) > data['Close']).astype(float)
+    data.loc[data.index[-1], 'y'] = np.nan  # last row has no known outcome yet
 
     return data
 
@@ -89,32 +90,20 @@ def predict_today_and_history(df_feat, model, scaler, n_history=5):
     chart_dates  = chart_slice['Date'].dt.strftime('%Y-%m-%d').tolist()
     chart_prices = chart_slice['Close'].round(2).tolist()
 
-    # Rows that have both features AND known y (all but the last)
-    df_known = df_feat.dropna(subset=FEATURES + ['y']).reset_index(drop=True)
-    # Last n_history rows with known outcome
+    # Keep original df_feat index so we can look up next row correctly
+    df_known = df_feat.dropna(subset=FEATURES + ['y'])  # NO reset_index
     hist_slice = df_known.tail(n_history)
 
     X_hist = scaler.transform(hist_slice[FEATURES].values)
     pred_hist = model.predict(X_hist)
 
-    # Next-day close needed to compute actual return
-    # df_known row i has Close[i], and y[i] = 1 iff Close[i+1] > Close[i]
-    # We need Close[i+1] — grab it from df_feat aligned by index
-    hist_indices = hist_slice.index.tolist()
-
     history = []
-    for i, (idx, row) in enumerate(hist_slice.iterrows()):
-        # Find next row in df_feat to get actual next close
-        next_rows = df_feat[df_feat.index == idx + 1]
-        if len(next_rows) == 0:
-            # fallback: look by position in df_known
-            pos = df_known.index.get_loc(idx)
-            if pos + 1 < len(df_known):
-                next_close = float(df_known.iloc[pos + 1]['Close'])
-            else:
-                next_close = None
+    for i, (orig_idx, row) in enumerate(hist_slice.iterrows()):
+        # orig_idx is the RangeIndex of df_feat → orig_idx+1 is the actual next day
+        if orig_idx + 1 in df_feat.index:
+            next_close = float(df_feat.loc[orig_idx + 1, 'Close'])
         else:
-            next_close = float(next_rows.iloc[0]['Close'])
+            next_close = None
 
         close = float(row['Close'])
         # Daily return: (next_close - close) / close
@@ -136,11 +125,11 @@ def predict_today_and_history(df_feat, model, scaler, n_history=5):
         history.append({
             'date':         row['Date'].strftime('%d/%m/%Y'),
             'close':        round(close, 2),
-            'next_close':   round(next_close, 2) if next_close else None,
+            'next_close':   round(next_close, 2) if next_close is not None else None,
             'daily_return': round(daily_return * 100, 3) if daily_return is not None else None,
             'actual_up':    int(row['y']),
             'predicted_up': predicted,
-            'correct':      int(predicted == row['y']),
+            'correct':      int(predicted == int(row['y'])),
             'gain_eur':     gain_eur,
             'position':     'LONG' if predicted == 1 else 'SHORT',
         })
