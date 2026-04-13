@@ -281,11 +281,11 @@
       const signalClass = isUnknown ? 'unknown' : (isUp ? 'up' : 'down');
       const signalText  = isUnknown ? '— Inconnu' : (isUp ? '↑ Hausse prévue' : '↓ Baisse prévue');
 
-      // ── Gain simulation réel (100 € / jour, rendement BTC réel)
+      // ── Gain simulation réel (1000 € / jour, rendement BTC réel)
       const fmtGain = v => (v >= 0 ? '+' : '') + v.toFixed(2) + ' €';
       let totalGain = 0;
       const chips = data.history.map(h => {
-        const g = h.gain_eur ?? 0;
+        const g = (h.gain_eur ?? 0) * 10;
         totalGain += g;
         const d = h.date.slice(0, 5);
         const isPos = g >= 0;
@@ -344,7 +344,7 @@
             <div class="gain-top">
               <div>
                 <div class="gain-amount ${gainClass}">${fmtGain(totalGain)}</div>
-                <div class="gain-sub">gain net sur les 5 derniers jours · 100 € / jour</div>
+                <div class="gain-sub">gain net sur les 5 derniers jours · 1 000 € / jour</div>
               </div>
               <div class="gain-accuracy">
                 <div class="accuracy-ring">${correctCount}/5</div>
