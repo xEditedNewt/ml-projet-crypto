@@ -7,16 +7,19 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <style>
     :root {
-      --bg:      #0d1117;
-      --surface: #161b22;
-      --border:  #21262d;
-      --text:    #e6edf3;
-      --muted:   #8b949e;
-      --accent:  #f7931a;   /* BTC orange */
-      --green:   #3fb950;
-      --red:     #f85149;
+      --bg:        #0d1117;
+      --surface:   #161b22;
+      --surface2:  #1c2128;
+      --border:    #21262d;
+      --text:      #e6edf3;
+      --muted:     #8b949e;
+      --accent:    #f7931a;
+      --green:     #3fb950;
+      --red:       #f85149;
       --green-bg:  rgba(63,185,80,.12);
       --red-bg:    rgba(248,81,73,.12);
+      --green-border: rgba(63,185,80,.3);
+      --red-border:   rgba(248,81,73,.3);
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -26,7 +29,7 @@
       color: var(--text);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
       min-height: 100vh;
-      padding: 32px 16px 64px;
+      padding: 24px 16px 56px;
     }
 
     /* ── Header ── */
@@ -34,120 +37,184 @@
       display: flex;
       align-items: center;
       gap: 12px;
-      max-width: 860px;
-      margin: 0 auto 40px;
+      max-width: 900px;
+      margin: 0 auto 28px;
     }
     .btc-icon {
-      width: 40px; height: 40px;
+      width: 42px; height: 42px;
       background: var(--accent);
       border-radius: 50%;
       display: flex; align-items: center; justify-content: center;
       font-weight: 800; font-size: 20px; color: #fff;
       flex-shrink: 0;
+      box-shadow: 0 0 16px rgba(247,147,26,.35);
     }
-    header h1 { font-size: 1.4rem; font-weight: 700; }
-    header p  { font-size: .82rem; color: var(--muted); }
+    header h1 { font-size: 1.35rem; font-weight: 700; }
+    header p  { font-size: .8rem; color: var(--muted); margin-top: 2px; }
 
-    /* ── Grid ── */
-    .grid {
-      display: grid;
-      max-width: 860px;
-      margin: 0 auto;
-      gap: 16px;
-      grid-template-columns: 1fr 1fr;
-      grid-template-areas:
-        "signal  price"
-        "chart   chart"
-        "history history";
-    }
-    @media (max-width: 560px) {
-      .grid { grid-template-columns: 1fr; grid-template-areas: "signal" "price" "chart" "history"; }
+    /* ── Layout ── */
+    .wrap { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+
+    .row { display: grid; gap: 14px; }
+    .row-2 { grid-template-columns: 1fr 1fr; }
+    .row-3 { grid-template-columns: 1fr 1fr 1fr; }
+
+    @media (max-width: 640px) {
+      .row-2, .row-3 { grid-template-columns: 1fr; }
+      body { padding: 16px 12px 48px; }
     }
 
+    /* ── Cards ── */
     .card {
       background: var(--surface);
       border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 24px;
+      border-radius: 14px;
+      padding: 20px 22px;
     }
     .card-label {
-      font-size: .72rem;
+      font-size: .68rem;
       text-transform: uppercase;
-      letter-spacing: .08em;
+      letter-spacing: .09em;
       color: var(--muted);
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
 
-    /* ── Signal card ── */
-    .card-signal  { grid-area: signal; }
+    /* ── Signal ── */
     .signal-badge {
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      padding: 10px 18px;
+      padding: 9px 16px;
       border-radius: 8px;
-      font-size: 1.05rem;
+      font-size: 1rem;
       font-weight: 700;
       margin-bottom: 8px;
     }
-    .signal-badge.up   { background: var(--green-bg); color: var(--green); }
-    .signal-badge.down { background: var(--red-bg);   color: var(--red);   }
-    .signal-badge.unknown { background: rgba(139,148,158,.15); color: var(--muted); }
-    .signal-arrow { font-size: 1.3rem; }
-    .signal-date  { font-size: .8rem; color: var(--muted); }
+    .signal-badge.up      { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+    .signal-badge.down    { background: var(--red-bg);   color: var(--red);   border: 1px solid var(--red-border); }
+    .signal-badge.unknown { background: rgba(139,148,158,.1); color: var(--muted); border: 1px solid var(--border); }
+    .signal-date { font-size: .78rem; color: var(--muted); }
 
-    /* ── Price card ── */
-    .card-price { grid-area: price; }
+    /* ── Price ── */
     .price-value {
-      font-size: 2rem;
+      font-size: 1.9rem;
       font-weight: 700;
       color: var(--accent);
       letter-spacing: -.02em;
     }
-    .price-ticker { font-size: .82rem; color: var(--muted); margin-top: 4px; }
+    .price-ticker { font-size: .8rem; color: var(--muted); margin-top: 4px; }
 
-    /* ── Chart card ── */
-    .card-chart { grid-area: chart; }
-    .chart-wrap { position: relative; height: 220px; }
+    /* ── Chart ── */
+    .chart-wrap { position: relative; height: 200px; }
+    @media (max-width: 640px) { .chart-wrap { height: 170px; } }
 
-    /* ── History card ── */
-    .card-history { grid-area: history; }
+    /* ── Gain card ── */
+    .gain-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 22px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .gain-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .gain-amount {
+      font-size: 2.2rem;
+      font-weight: 800;
+      letter-spacing: -.03em;
+      line-height: 1;
+    }
+    .gain-amount.pos { color: var(--green); }
+    .gain-amount.neg { color: var(--red); }
+    .gain-amount.zero { color: var(--muted); }
+    .gain-sub {
+      font-size: .78rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+    .gain-accuracy {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 4px;
+    }
+    .accuracy-ring {
+      font-size: 1.4rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .accuracy-label { font-size: .72rem; color: var(--muted); }
+
+    /* Day chips */
+    .day-chips {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .day-chip {
+      flex: 1;
+      min-width: 52px;
+      border-radius: 10px;
+      padding: 8px 6px;
+      text-align: center;
+      border: 1px solid transparent;
+    }
+    .day-chip.win  { background: var(--green-bg); border-color: var(--green-border); }
+    .day-chip.loss { background: var(--red-bg);   border-color: var(--red-border); }
+    .day-chip-date  { font-size: .65rem; color: var(--muted); margin-bottom: 4px; }
+    .day-chip-gain  { font-size: .85rem; font-weight: 700; }
+    .day-chip.win  .day-chip-gain { color: var(--green); }
+    .day-chip.loss .day-chip-gain { color: var(--red); }
+    .day-chip-icon  { font-size: .75rem; margin-top: 2px; }
+
+    /* ── History table ── */
+    .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     table {
       width: 100%;
       border-collapse: collapse;
-      font-size: .85rem;
+      font-size: .84rem;
+      min-width: 360px;
     }
     th {
       text-align: left;
       color: var(--muted);
       font-weight: 500;
-      padding: 0 8px 10px;
+      padding: 0 10px 10px;
       border-bottom: 1px solid var(--border);
-      font-size: .75rem;
+      font-size: .7rem;
       text-transform: uppercase;
-      letter-spacing: .06em;
+      letter-spacing: .07em;
+      white-space: nowrap;
     }
     td {
-      padding: 10px 8px;
+      padding: 10px 10px;
       border-bottom: 1px solid var(--border);
       vertical-align: middle;
+      white-space: nowrap;
     }
     tr:last-child td { border-bottom: none; }
     .tag {
       display: inline-block;
       padding: 3px 8px;
-      border-radius: 4px;
-      font-size: .75rem;
+      border-radius: 5px;
+      font-size: .74rem;
       font-weight: 600;
     }
     .tag.up   { background: var(--green-bg); color: var(--green); }
-    .tag.down { background: var(--red-bg);   color: var(--red);   }
-    .icon-check { color: var(--green); font-size: 1rem; }
-    .icon-cross { color: var(--red);   font-size: 1rem; }
+    .tag.down { background: var(--red-bg);   color: var(--red); }
+    .icon-check { color: var(--green); }
+    .icon-cross { color: var(--red); }
 
     /* ── Loading / error ── */
     .loading {
-      max-width: 860px; margin: 80px auto;
+      max-width: 900px; margin: 80px auto;
       text-align: center; color: var(--muted);
     }
     .spinner {
@@ -161,10 +228,10 @@
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .error-msg {
-      max-width: 860px; margin: 80px auto;
+      max-width: 900px; margin: 80px auto;
       background: var(--red-bg);
       border: 1px solid var(--red);
-      border-radius: 12px;
+      border-radius: 14px;
       padding: 24px;
       color: var(--red);
     }
@@ -172,11 +239,9 @@
     .refresh-note {
       text-align: center;
       color: var(--muted);
-      font-size: .74rem;
-      margin-top: 28px;
+      font-size: .72rem;
+      margin-top: 24px;
     }
-    a { color: var(--accent); text-decoration: none; }
-    a:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -197,71 +262,114 @@
   </div>
 
   <script>
-  const fmt = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+  const fmtUSD = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+  const fmtEUR = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
 
   async function load() {
     const app = document.getElementById('app');
     try {
       const res  = await fetch('/api/prediction');
       const data = await res.json();
-
       if (data.status !== 'ok') throw new Error(data.message || 'Erreur inconnue');
 
+      // ── Signal
       const isUp      = data.today_signal === 1;
       const isUnknown = data.today_signal === null;
       const signalClass = isUnknown ? 'unknown' : (isUp ? 'up' : 'down');
-      const signalText  = isUnknown ? '— Inconnu' : (isUp ? '↑ Hausse' : '↓ Baisse');
+      const signalText  = isUnknown ? '— Inconnu' : (isUp ? '↑ Hausse prévue' : '↓ Baisse prévue');
 
+      // ── Gain simulation (100 € / jour)
+      const BET = 100;
+      let totalGain = 0;
+      const chips = data.history.map(h => {
+        const gain = h.correct ? +BET : -BET;
+        totalGain += gain;
+        const d = h.date.slice(0, 5); // "DD/MM"
+        return `
+          <div class="day-chip ${h.correct ? 'win' : 'loss'}">
+            <div class="day-chip-date">${d}</div>
+            <div class="day-chip-gain">${gain > 0 ? '+' : ''}${fmtEUR.format(gain)}</div>
+            <div class="day-chip-icon">${h.correct ? '✓' : '✗'}</div>
+          </div>`;
+      }).join('');
+
+      const correctCount = data.history.filter(h => h.correct).length;
+      const gainClass    = totalGain > 0 ? 'pos' : totalGain < 0 ? 'neg' : 'zero';
+      const gainSign     = totalGain > 0 ? '+' : '';
+
+      // ── History rows
       const histRows = data.history.map(h => `
         <tr>
           <td>${h.date}</td>
-          <td>${fmt.format(h.close)}</td>
+          <td>${fmtUSD.format(h.close)}</td>
           <td><span class="tag ${h.predicted_up ? 'up' : 'down'}">${h.predicted_up ? '↑ Hausse' : '↓ Baisse'}</span></td>
-          <td><span class="tag ${h.actual_up ? 'up' : 'down'}">${h.actual_up ? '↑ Hausse' : '↓ Baisse'}</span></td>
+          <td><span class="tag ${h.actual_up    ? 'up' : 'down'}">${h.actual_up    ? '↑ Hausse' : '↓ Baisse'}</span></td>
           <td>${h.correct ? '<span class="icon-check">✓</span>' : '<span class="icon-cross">✗</span>'}</td>
         </tr>`).join('');
 
       app.innerHTML = `
-        <div class="grid">
+        <div class="wrap">
 
-          <div class="card card-signal">
-            <div class="card-label">Signal du jour</div>
-            <div class="signal-badge ${signalClass}">${signalText}</div>
-            <div class="signal-date">${data.today_date}</div>
+          <!-- Ligne 1 : signal + prix -->
+          <div class="row row-2">
+            <div class="card">
+              <div class="card-label">Signal du jour</div>
+              <div class="signal-badge ${signalClass}">${signalText}</div>
+              <div class="signal-date">${data.today_date}</div>
+            </div>
+            <div class="card">
+              <div class="card-label">Prix actuel (clôture)</div>
+              <div class="price-value">${fmtUSD.format(data.current_price)}</div>
+              <div class="price-ticker">BTC / USD</div>
+            </div>
           </div>
 
-          <div class="card card-price">
-            <div class="card-label">Prix actuel (clôture)</div>
-            <div class="price-value">${fmt.format(data.current_price)}</div>
-            <div class="price-ticker">BTC / USD</div>
-          </div>
-
-          <div class="card card-chart">
+          <!-- Ligne 2 : courbe -->
+          <div class="card">
             <div class="card-label">Cours — 30 derniers jours</div>
             <div class="chart-wrap">
               <canvas id="btcChart"></canvas>
             </div>
           </div>
 
-          <div class="card card-history">
+          <!-- Ligne 3 : simulation gains -->
+          <div class="gain-card">
+            <div class="card-label">Simulation — 100 € misés par jour</div>
+            <div class="gain-top">
+              <div>
+                <div class="gain-amount ${gainClass}">${gainSign}${fmtEUR.format(totalGain)}</div>
+                <div class="gain-sub">gain net sur les 5 derniers jours</div>
+              </div>
+              <div class="gain-accuracy">
+                <div class="accuracy-ring">${correctCount}/5</div>
+                <div class="accuracy-label">prédictions correctes</div>
+              </div>
+            </div>
+            <div class="day-chips">${chips}</div>
+          </div>
+
+          <!-- Ligne 4 : historique détaillé -->
+          <div class="card">
             <div class="card-label">Historique des 5 dernières prédictions</div>
-            <table>
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Clôture</th>
-                  <th>Prédiction</th>
-                  <th>Réalité</th>
-                  <th>Résultat</th>
-                </tr>
-              </thead>
-              <tbody>${histRows}</tbody>
-            </table>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Clôture</th>
+                    <th>Prédiction</th>
+                    <th>Réalité</th>
+                    <th>Résultat</th>
+                  </tr>
+                </thead>
+                <tbody>${histRows}</tbody>
+              </table>
+            </div>
           </div>
 
         </div>
         <p class="refresh-note">
-          Données rafraîchies toutes les heures · Modèle KNN (données 2018→aujourd'hui)
+          Données rafraîchies toutes les heures · Modèle KNN entraîné sur les données 2018 → aujourd'hui
         </p>`;
 
       // Chart
@@ -271,30 +379,33 @@
         data: {
           labels: data.chart_dates,
           datasets: [{
-            data:          data.chart_prices,
-            borderColor:   '#f7931a',
-            borderWidth:   2,
-            pointRadius:   0,
-            tension:       0.3,
-            fill:          true,
-            backgroundColor: 'rgba(247,147,26,.08)',
+            data:            data.chart_prices,
+            borderColor:     '#f7931a',
+            borderWidth:     2,
+            pointRadius:     0,
+            tension:         0.3,
+            fill:            true,
+            backgroundColor: 'rgba(247,147,26,.07)',
           }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
-          plugins: { legend: { display: false }, tooltip: {
-            callbacks: { label: ctx => ' ' + fmt.format(ctx.raw) }
-          }},
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: c => ' ' + fmtUSD.format(c.raw) } }
+          },
           scales: {
             x: {
-              ticks: { color: '#8b949e', maxTicksLimit: 6, font: { size: 11 } },
+              ticks: { color: '#8b949e', maxTicksLimit: 5, font: { size: 10 } },
               grid:  { color: '#21262d' },
             },
             y: {
-              ticks: { color: '#8b949e', font: { size: 11 },
-                callback: v => '$' + (v >= 1000 ? (v/1000).toFixed(0)+'k' : v) },
-              grid:  { color: '#21262d' },
+              ticks: {
+                color: '#8b949e', font: { size: 10 },
+                callback: v => '$' + (v >= 1000 ? (v/1000).toFixed(0) + 'k' : v)
+              },
+              grid: { color: '#21262d' },
             }
           }
         }
