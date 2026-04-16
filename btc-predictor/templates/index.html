@@ -3,422 +3,658 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>BTC Predictor — KNN</title>
+  <title>BTC Predictor</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
   <style>
     :root {
-      --bg:        #0d1117;
-      --surface:   #161b22;
-      --surface2:  #1c2128;
-      --border:    #21262d;
-      --text:      #e6edf3;
-      --muted:     #8b949e;
-      --accent:    #f7931a;
-      --green:     #3fb950;
-      --red:       #f85149;
-      --green-bg:  rgba(63,185,80,.12);
-      --red-bg:    rgba(248,81,73,.12);
-      --green-border: rgba(63,185,80,.3);
-      --red-border:   rgba(248,81,73,.3);
+      --bg:          #080c14;
+      --surface:     #0f1623;
+      --surface2:    #161d2e;
+      --border:      #1e2a42;
+      --border2:     #253350;
+      --text:        #e8eef8;
+      --muted:       #6b7fa3;
+      --muted2:      #3d4f6e;
+      --accent:      #f7931a;
+      --accent-dim:  rgba(247,147,26,.15);
+      --green:       #22d47e;
+      --red:         #f05252;
+      --green-bg:    rgba(34,212,126,.08);
+      --red-bg:      rgba(240,82,82,.08);
+      --green-border:rgba(34,212,126,.25);
+      --red-border:  rgba(240,82,82,.25);
+      --radius:      16px;
+      --radius-sm:   10px;
     }
-
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      min-height: 100vh;
-      padding: 24px 16px 56px;
+      background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+      min-height: 100vh; padding: 28px 16px 64px;
+      -webkit-font-smoothing: antialiased;
+    }
+    body::before {
+      content: ''; position: fixed; top: -200px; left: -200px;
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(247,147,26,.055) 0%, transparent 70%);
+      pointer-events: none; z-index: 0;
     }
 
     /* ── Header ── */
     header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      max-width: 900px;
-      margin: 0 auto 28px;
+      display: flex; align-items: center; justify-content: space-between;
+      max-width: 980px; margin: 0 auto 24px; position: relative; z-index: 1;
     }
+    .header-left { display: flex; align-items: center; gap: 14px; }
     .btc-icon {
-      width: 42px; height: 42px;
-      background: var(--accent);
-      border-radius: 50%;
+      width: 46px; height: 46px;
+      background: linear-gradient(135deg, #f7931a, #e67e00); border-radius: 14px;
       display: flex; align-items: center; justify-content: center;
-      font-weight: 800; font-size: 20px; color: #fff;
-      flex-shrink: 0;
-      box-shadow: 0 0 16px rgba(247,147,26,.35);
+      font-weight: 900; font-size: 22px; color: #fff;
+      box-shadow: 0 4px 20px rgba(247,147,26,.35); flex-shrink: 0;
     }
-    header h1 { font-size: 1.35rem; font-weight: 700; }
-    header p  { font-size: .8rem; color: var(--muted); margin-top: 2px; }
+    .header-title { font-size: 1.25rem; font-weight: 700; letter-spacing: -.02em; }
+    .header-sub   { font-size: .75rem; color: var(--muted); margin-top: 2px; }
+    .header-badge {
+      font-size: .7rem; padding: 4px 10px; border-radius: 20px;
+      background: var(--surface2); border: 1px solid var(--border); color: var(--muted);
+    }
+    .dot-live { display: inline-block; width: 6px; height: 6px; background: var(--green); border-radius: 50%; margin-right: 5px; animation: pulse 2s ease-in-out infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    /* ── Model selector ── */
+    .model-bar { max-width: 980px; margin: 0 auto 16px; position: relative; z-index: 1; }
+    .model-bar-label { font-size: .65rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 600; margin-bottom: 8px; }
+    .model-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+    .model-tab {
+      padding: 10px 16px; border-radius: var(--radius-sm);
+      border: 1px solid var(--border); background: var(--surface2);
+      cursor: pointer; text-align: left; transition: border-color .15s, background .15s;
+      min-width: 130px;
+    }
+    .model-tab:hover:not(.loading-tab) { border-color: var(--border2); }
+    .model-tab.active { background: var(--accent-dim); border-color: rgba(247,147,26,.4); }
+    .model-tab.loading-tab { opacity: .5; pointer-events: none; }
+    .mt-name { font-size: .82rem; font-weight: 700; color: var(--muted); display: block; }
+    .model-tab.active .mt-name { color: var(--accent); }
+    .mt-sub { font-size: .65rem; color: var(--muted2); display: block; margin-top: 2px; }
+    .mt-acc { font-size: .68rem; color: var(--green); display: block; margin-top: 3px; }
+    @media (max-width: 720px) {
+      .model-tab { min-width: 0; flex: 1; padding: 8px 10px; }
+      .mt-sub, .mt-acc { display: none; }
+    }
 
     /* ── Layout ── */
-    .wrap { max-width: 900px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
-
-    .row { display: grid; gap: 14px; }
-    .row-2 { grid-template-columns: 1fr 1fr; }
-    .row-3 { grid-template-columns: 1fr 1fr 1fr; }
-
-    @media (max-width: 640px) {
-      .row-2, .row-3 { grid-template-columns: 1fr; }
-      body { padding: 16px 12px 48px; }
+    .page-wrap { max-width: 980px; margin: 0 auto; position: relative; z-index: 1; }
+    .wrap { display: flex; flex-direction: column; gap: 16px; }
+    .grid { display: grid; gap: 16px; }
+    .g2 { grid-template-columns: 1fr 1fr; }
+    .g3 { grid-template-columns: 1fr 1fr 1fr; }
+    @media (max-width: 720px) {
+      .g2, .g3 { grid-template-columns: 1fr; }
+      body { padding: 20px 12px 52px; }
+      header { margin-bottom: 18px; }
+      .header-badge { display: none; }
     }
 
     /* ── Cards ── */
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 20px 22px;
-    }
-    .card-label {
-      font-size: .68rem;
-      text-transform: uppercase;
-      letter-spacing: .09em;
-      color: var(--muted);
-      margin-bottom: 10px;
-    }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px 22px; }
+    .card-label { font-size: .65rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); margin-bottom: 12px; font-weight: 600; }
 
-    /* ── Signal ── */
-    .signal-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 9px 16px;
-      border-radius: 8px;
-      font-size: 1rem;
-      font-weight: 700;
-      margin-bottom: 8px;
+    /* ── Signal hero ── */
+    .signal-hero {
+      border-radius: var(--radius); padding: 26px 28px;
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 20px; flex-wrap: wrap; border: 1px solid; position: relative; overflow: hidden;
     }
-    .signal-badge.up      { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
-    .signal-badge.down    { background: var(--red-bg);   color: var(--red);   border: 1px solid var(--red-border); }
-    .signal-badge.unknown { background: rgba(139,148,158,.1); color: var(--muted); border: 1px solid var(--border); }
-    .signal-date { font-size: .78rem; color: var(--muted); }
+    .signal-hero::before { content: ''; position: absolute; right: -60px; top: -60px; width: 200px; height: 200px; border-radius: 50%; opacity: .1; }
+    .signal-hero.up   { background: linear-gradient(135deg,rgba(34,212,126,.08),rgba(34,212,126,.02)); border-color: var(--green-border); }
+    .signal-hero.up::before   { background: var(--green); }
+    .signal-hero.down { background: linear-gradient(135deg,rgba(240,82,82,.08),rgba(240,82,82,.02));   border-color: var(--red-border); }
+    .signal-hero.down::before { background: var(--red); }
+    .signal-hero.unknown { background: var(--surface); border-color: var(--border); }
+    .signal-left { display: flex; align-items: center; gap: 18px; }
+    .signal-arrow { font-size: 2.6rem; line-height: 1; flex-shrink: 0; }
+    .signal-hero.up    .signal-arrow { color: var(--green); }
+    .signal-hero.down  .signal-arrow { color: var(--red); }
+    .signal-hero.unknown .signal-arrow { color: var(--muted); }
+    .signal-title { font-size: 1.55rem; font-weight: 800; letter-spacing: -.03em; line-height: 1; }
+    .signal-hero.up    .signal-title { color: var(--green); }
+    .signal-hero.down  .signal-title { color: var(--red); }
+    .signal-hero.unknown .signal-title { color: var(--muted); }
+    .signal-meta { font-size: .77rem; color: var(--muted); margin-top: 5px; line-height: 1.6; }
+    .signal-meta strong { color: var(--text); font-weight: 600; }
+    .signal-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+    .signal-label-sm { font-size: .65rem; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); font-weight: 600; }
+    .signal-pos-badge { padding: 6px 18px; border-radius: 8px; font-size: .85rem; font-weight: 700; letter-spacing: .04em; }
+    .signal-hero.up   .signal-pos-badge { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+    .signal-hero.down .signal-pos-badge { background: var(--red-bg);   color: var(--red);   border: 1px solid var(--red-border); }
+    .signal-acc { font-size: .72rem; color: var(--muted); }
+    .signal-acc strong { color: var(--text); }
 
-    /* ── Price ── */
-    .price-value {
-      font-size: 1.9rem;
-      font-weight: 700;
-      color: var(--accent);
-      letter-spacing: -.02em;
-    }
-    .price-ticker { font-size: .8rem; color: var(--muted); margin-top: 4px; }
+    /* ── Stat cards ── */
+    .stat-value { font-size: 1.7rem; font-weight: 800; letter-spacing: -.03em; line-height: 1; color: var(--accent); }
+    .stat-value.green   { color: var(--green); }
+    .stat-value.red     { color: var(--red); }
+    .stat-value.neutral { color: var(--text); }
+    .stat-sub { font-size: .74rem; color: var(--muted); margin-top: 5px; }
 
     /* ── Chart ── */
-    .chart-wrap { position: relative; height: 200px; }
-    @media (max-width: 640px) { .chart-wrap { height: 170px; } }
+    .chart-wrap { position: relative; height: 210px; }
+    @media (max-width: 720px) { .chart-wrap { height: 175px; } }
 
-    /* ── Gain card ── */
-    .gain-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 14px;
-      padding: 22px 24px;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
+    /* ── Controls ── */
+    .ctrl-block {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: var(--radius); padding: 18px 20px;
+      display: flex; flex-direction: column; gap: 12px;
     }
-    .gain-top {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 12px;
+    .ctrl-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .ctrl-label { font-size: .67rem; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); font-weight: 600; min-width: 80px; flex-shrink: 0; }
+    .ctrl-group { display: flex; gap: 6px; flex-wrap: wrap; }
+    .ctrl-btn {
+      padding: 5px 13px; border-radius: 20px;
+      border: 1px solid var(--border); background: var(--surface);
+      color: var(--muted); font-size: .75rem; font-weight: 500;
+      cursor: pointer; transition: border-color .15s, color .15s, background .15s;
     }
-    .gain-amount {
-      font-size: 2.2rem;
-      font-weight: 800;
-      letter-spacing: -.03em;
-      line-height: 1;
-    }
-    .gain-amount.pos { color: var(--green); }
-    .gain-amount.neg { color: var(--red); }
-    .gain-amount.zero { color: var(--muted); }
-    .gain-sub {
-      font-size: .78rem;
-      color: var(--muted);
-      margin-top: 4px;
-    }
-    .gain-accuracy {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 4px;
-    }
-    .accuracy-ring {
-      font-size: 1.4rem;
-      font-weight: 700;
-      color: var(--text);
-    }
-    .accuracy-label { font-size: .72rem; color: var(--muted); }
+    .ctrl-btn:hover { border-color: var(--border2); color: var(--text); }
+    .ctrl-btn.active       { background: var(--accent-dim); border-color: rgba(247,147,26,.45); color: var(--accent); font-weight: 700; }
+    .ctrl-btn.active-green { background: var(--green-bg); border-color: var(--green-border); color: var(--green); font-weight: 700; }
+    .ctrl-note { font-size: .67rem; color: var(--muted2); }
 
-    /* Day chips */
-    .day-chips {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-    .day-chip {
-      flex: 1;
-      min-width: 52px;
-      border-radius: 10px;
-      padding: 8px 6px;
-      text-align: center;
-      border: 1px solid transparent;
-    }
-    .day-chip.win  { background: var(--green-bg); border-color: var(--green-border); }
-    .day-chip.loss { background: var(--red-bg);   border-color: var(--red-border); }
-    .day-chip-date  { font-size: .63rem; color: var(--muted); margin-bottom: 3px; }
-    .day-chip-pos   { font-size: .68rem; font-weight: 600; margin-bottom: 5px; opacity: .85; }
-    .day-chip.win  .day-chip-pos  { color: var(--green); }
-    .day-chip.loss .day-chip-pos  { color: var(--red); }
-    .day-chip-gain  { font-size: .9rem; font-weight: 700; }
-    .day-chip.win  .day-chip-gain { color: var(--green); }
-    .day-chip.loss .day-chip-gain { color: var(--red); }
-    .day-chip-ret   { font-size: .65rem; color: var(--muted); margin-top: 3px; }
+    /* ── Simulation ── */
+    .sim-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 22px 24px; }
+    .sim-header { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
+    .sim-total { font-size: 2rem; font-weight: 800; letter-spacing: -.03em; line-height: 1; transition: color .2s; }
+    .sim-total.pos  { color: var(--green); }
+    .sim-total.neg  { color: var(--red); }
+    .sim-total.zero { color: var(--muted); }
+    .sim-desc { font-size: .73rem; color: var(--muted); margin-top: 4px; }
+    .sim-right { text-align: right; }
+    .acc-number { font-size: 1.5rem; font-weight: 800; color: var(--text); line-height: 1; }
+    .acc-label  { font-size: .67rem; color: var(--muted); margin-top: 3px; }
+    .divider    { height: 1px; background: var(--border); margin: 16px 0; }
 
-    /* ── History table ── */
+    /* ── Chips ── */
+    .chips-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+    @media (max-width: 640px) { .chips-grid { grid-template-columns: repeat(3, 1fr); } }
+    @media (max-width: 380px) { .chips-grid { grid-template-columns: repeat(2, 1fr); } }
+    .day-chip { border-radius: var(--radius-sm); padding: 10px 8px; text-align: center; border: 1px solid transparent; transition: transform .1s; }
+    .day-chip:hover { transform: translateY(-1px); }
+    .day-chip.win     { background: var(--green-bg); border-color: var(--green-border); }
+    .day-chip.loss    { background: var(--red-bg);   border-color: var(--red-border); }
+    .day-chip.pending { background: var(--surface2); border-color: var(--border); }
+    .chip-date { font-size: .62rem; color: var(--muted); margin-bottom: 3px; }
+    .chip-pos  { font-size: .67rem; font-weight: 700; margin-bottom: 3px; }
+    .day-chip.win  .chip-pos { color: var(--green); }
+    .day-chip.loss .chip-pos { color: var(--red); }
+    .day-chip.pending .chip-pos { color: var(--muted); }
+    .chip-type { font-size: .6rem; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; margin-bottom: 5px; }
+    .chip-type.tp  { color: var(--green); }
+    .chip-type.eod { color: var(--muted2); }
+    .chip-gain { font-size: .88rem; font-weight: 800; }
+    .day-chip.win  .chip-gain { color: var(--green); }
+    .day-chip.loss .chip-gain { color: var(--red); }
+    .chip-ret  { font-size: .61rem; color: var(--muted); margin-top: 3px; }
+
+    /* ── Pagination ── */
+    .pagination { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 14px; }
+    .page-btn { padding: 5px 14px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface2); color: var(--muted); font-size: .75rem; cursor: pointer; transition: border-color .15s, color .15s; }
+    .page-btn:hover:not(:disabled) { border-color: var(--border2); color: var(--text); }
+    .page-btn:disabled { opacity: .35; cursor: default; }
+    .page-info { font-size: .73rem; color: var(--muted); }
+
+    /* ── Table ── */
     .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: .84rem;
-      min-width: 360px;
-    }
-    th {
-      text-align: left;
-      color: var(--muted);
-      font-weight: 500;
-      padding: 0 10px 10px;
-      border-bottom: 1px solid var(--border);
-      font-size: .7rem;
-      text-transform: uppercase;
-      letter-spacing: .07em;
-      white-space: nowrap;
-    }
-    td {
-      padding: 10px 10px;
-      border-bottom: 1px solid var(--border);
-      vertical-align: middle;
-      white-space: nowrap;
-    }
+    table { width: 100%; border-collapse: collapse; font-size: .83rem; min-width: 400px; }
+    th { text-align: left; color: var(--muted); font-weight: 600; padding: 0 12px 10px; border-bottom: 1px solid var(--border); font-size: .65rem; text-transform: uppercase; letter-spacing: .09em; white-space: nowrap; }
+    td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; white-space: nowrap; }
     tr:last-child td { border-bottom: none; }
-    .tag {
-      display: inline-block;
-      padding: 3px 8px;
-      border-radius: 5px;
-      font-size: .74rem;
-      font-weight: 600;
-    }
-    .tag.up   { background: var(--green-bg); color: var(--green); }
-    .tag.down { background: var(--red-bg);   color: var(--red); }
-    .icon-check { color: var(--green); }
-    .icon-cross { color: var(--red); }
+    tbody tr:hover { background: var(--surface2); }
+    .tag { display: inline-flex; align-items: center; gap: 4px; padding: 3px 9px; border-radius: 6px; font-size: .73rem; font-weight: 600; }
+    .tag.up   { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+    .tag.down { background: var(--red-bg);   color: var(--red);   border: 1px solid var(--red-border); }
+    .tag.tp   { background: rgba(34,212,126,.12); color: var(--green); border: 1px solid var(--green-border); }
+    .tag.eod  { background: var(--surface2); color: var(--muted); border: 1px solid var(--border); }
+    .gain-cell { font-weight: 700; }
+    .gain-cell.pos { color: var(--green); }
+    .gain-cell.neg { color: var(--red); }
+    .ok  { color: var(--green); font-weight: 600; }
+    .nok { color: var(--red);   font-weight: 600; }
 
-    /* ── Loading / error ── */
-    .loading {
-      max-width: 900px; margin: 80px auto;
-      text-align: center; color: var(--muted);
-    }
-    .spinner {
-      width: 36px; height: 36px;
-      border: 3px solid var(--border);
-      border-top-color: var(--accent);
-      border-radius: 50%;
-      animation: spin .8s linear infinite;
-      margin: 0 auto 16px;
-    }
+    /* ── Loading / Error ── */
+    .loading { padding: 80px 0; text-align: center; color: var(--muted); }
+    .spinner { width: 38px; height: 38px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; margin: 0 auto 18px; }
+    .loading p { font-size: .85rem; }
     @keyframes spin { to { transform: rotate(360deg); } }
-
-    .error-msg {
-      max-width: 900px; margin: 80px auto;
-      background: var(--red-bg);
-      border: 1px solid var(--red);
-      border-radius: 14px;
-      padding: 24px;
-      color: var(--red);
-    }
-
-    .refresh-note {
-      text-align: center;
-      color: var(--muted);
-      font-size: .72rem;
-      margin-top: 24px;
-    }
+    .error-msg { background: var(--red-bg); border: 1px solid var(--red-border); border-radius: var(--radius); padding: 24px; color: var(--red); }
+    .footer-note { text-align: center; color: var(--muted2); font-size: .7rem; margin-top: 28px; line-height: 1.8; }
   </style>
 </head>
 <body>
 
   <header>
-    <div class="btc-icon">₿</div>
-    <div>
-      <h1>BTC Predictor</h1>
-      <p>Prédiction KNN — hausse ou baisse du jour ?</p>
+    <div class="header-left">
+      <div class="btc-icon">₿</div>
+      <div>
+        <div class="header-title">BTC Predictor</div>
+        <div class="header-sub">Prédiction directionnelle — Classification binaire</div>
+      </div>
     </div>
+    <div class="header-badge"><span class="dot-live"></span>Données en direct</div>
   </header>
 
-  <div id="app">
-    <div class="loading">
-      <div class="spinner"></div>
-      <p>Chargement des données et entraînement du modèle…</p>
+  <!-- Model selector — persistent, never rebuilt -->
+  <div class="page-wrap">
+    <div class="model-bar">
+      <div class="model-bar-label">Modèle de prédiction</div>
+      <div class="model-tabs" id="model-tabs">
+        <button class="model-tab active" data-model="knn"      onclick="selectModel('knn')">
+          <span class="mt-name">KNN</span>
+          <span class="mt-sub">K plus proches voisins</span>
+          <span class="mt-acc" id="acc-knn"></span>
+        </button>
+        <button class="model-tab" data-model="logistic" onclick="selectModel('logistic')">
+          <span class="mt-name">Logistique</span>
+          <span class="mt-sub">Sans pénalité</span>
+          <span class="mt-acc" id="acc-logistic"></span>
+        </button>
+        <button class="model-tab" data-model="ridge" onclick="selectModel('ridge')">
+          <span class="mt-name">Ridge</span>
+          <span class="mt-sub">Régularisation L₂</span>
+          <span class="mt-acc" id="acc-ridge"></span>
+        </button>
+        <button class="model-tab" data-model="lasso" onclick="selectModel('lasso')">
+          <span class="mt-name">Lasso</span>
+          <span class="mt-sub">Régularisation L₁</span>
+          <span class="mt-acc" id="acc-lasso"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Content rebuilt on model change only -->
+    <div id="content">
+      <div class="loading">
+        <div class="spinner"></div>
+        <p>Chargement et entraînement du modèle KNN…</p>
+      </div>
     </div>
   </div>
 
   <script>
-  const fmtUSD = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
-  const fmtEUR = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
+  const fmtUSD  = new Intl.NumberFormat('fr-FR', { style:'currency', currency:'USD', maximumFractionDigits:0 });
+  const fmtGain = v => (v >= 0 ? '+' : '') + v.toFixed(2) + ' €';
+  const CHIPS_PER_PAGE = 10;
 
-  async function load() {
-    const app = document.getElementById('app');
-    try {
-      const res  = await fetch('/api/prediction');
-      const data = await res.json();
-      if (data.status !== 'ok') throw new Error(data.message || 'Erreur inconnue');
+  const MODEL_LABELS = { knn:'KNN', logistic:'Logistique', ridge:'Ridge (L₂)', lasso:'Lasso (L₁)' };
 
-      // ── Signal
-      const isUp      = data.today_signal === 1;
-      const isUnknown = data.today_signal === null;
-      const signalClass = isUnknown ? 'unknown' : (isUp ? 'up' : 'down');
-      const signalText  = isUnknown ? '— Inconnu' : (isUp ? '↑ Hausse prévue' : '↓ Baisse prévue');
+  // ── Global state — persists across model changes ───────────────────────────
+  let ALL_HISTORY     = [];
+  let YESTERDAY_CLOSE = null;
+  let CURRENT_MODEL   = 'knn';
+  let chartInstance   = null;
+  let priceInterval   = null;
 
-      // ── Gain simulation réel (1000 € / jour, rendement BTC réel)
-      const fmtGain = v => (v >= 0 ? '+' : '') + v.toFixed(2) + ' €';
-      let totalGain = 0;
-      const chips = data.history.map(h => {
-        const g = (h.gain_eur ?? 0) * 10;
-        totalGain += g;
-        const d = h.date.slice(0, 5);
-        const isPos = g >= 0;
-        const posLabel = h.position === 'LONG' ? '↑ Long' : '↓ Short';
-        return `
-          <div class="day-chip ${isPos ? 'win' : 'loss'}">
-            <div class="day-chip-date">${d}</div>
-            <div class="day-chip-pos">${posLabel}</div>
-            <div class="day-chip-gain">${fmtGain(g)}</div>
-            <div class="day-chip-ret">${h.daily_return >= 0 ? '+' : ''}${h.daily_return}%</div>
-          </div>`;
-      }).join('');
+  // S persists: changing model only refreshes the data, not the controls
+  const S = { mise: 1000, tp: 1, sl: 0, days: 60, page: 1 };
 
-      const correctCount = data.history.filter(h => h.correct).length;
-      totalGain = Math.round(totalGain * 100) / 100;
-      const gainClass = totalGain > 0 ? 'pos' : totalGain < 0 ? 'neg' : 'zero';
+  // ── TP calculation (no SL) ────────────────────────────────────────────────
+  function computeResult(h) {
+    if (h.next_close === null) return { gain: null, type: 'pending' };
+    const { tp, mise } = S;
+    const entry = h.close;
 
-      // ── History rows
-      const histRows = data.history.map(h => `
-        <tr>
-          <td>${h.date}</td>
-          <td>${fmtUSD.format(h.close)}</td>
-          <td><span class="tag ${h.predicted_up ? 'up' : 'down'}">${h.predicted_up ? '↑ Hausse' : '↓ Baisse'}</span></td>
-          <td><span class="tag ${h.actual_up    ? 'up' : 'down'}">${h.actual_up    ? '↑ Hausse' : '↓ Baisse'}</span></td>
-          <td>${h.correct ? '<span class="icon-check">✓</span>' : '<span class="icon-cross">✗</span>'}</td>
-        </tr>`).join('');
+    if (tp === 0) {
+      const ret = h.predicted_up ? (h.next_close - entry) / entry : (entry - h.next_close) / entry;
+      return { gain: mise * ret, type: 'eod' };
+    }
 
-      app.innerHTML = `
-        <div class="wrap">
+    if (h.predicted_up) {
+      const tpHit = h.next_high !== null && h.next_high >= entry * (1 + tp / 100);
+      if (tpHit) return { gain: mise * tp / 100, type: 'tp' };
+      return { gain: mise * (h.next_close - entry) / entry, type: 'eod' };
+    } else {
+      const tpHit = h.next_low !== null && h.next_low <= entry * (1 - tp / 100);
+      if (tpHit) return { gain: mise * tp / 100, type: 'tp' };
+      return { gain: mise * (entry - h.next_close) / entry, type: 'eod' };
+    }
+  }
 
-          <!-- Ligne 1 : signal + prix -->
-          <div class="row row-2">
-            <div class="card">
-              <div class="card-label">Signal du jour</div>
-              <div class="signal-badge ${signalClass}">${signalText}</div>
-              <div class="signal-date">${data.today_date}</div>
-            </div>
-            <div class="card">
-              <div class="card-label">Prix actuel (clôture)</div>
-              <div class="price-value">${fmtUSD.format(data.current_price)}</div>
-              <div class="price-ticker">BTC / USD</div>
-            </div>
+  // ── Simulation render ─────────────────────────────────────────────────────
+  function renderSim() {
+    const simTotal = document.getElementById('sim-total');
+    if (!simTotal) return;
+
+    const slice   = ALL_HISTORY.slice(-S.days).reverse();
+    const results = slice.map(h => ({ h, r: computeResult(h) }));
+    const totalGain    = results.reduce((s, x) => s + (x.r.gain ?? 0), 0);
+    const correctCount = results.filter(x => x.h.correct).length;
+    const tgRound      = Math.round(totalGain * 100) / 100;
+
+    simTotal.textContent = fmtGain(tgRound);
+    simTotal.className   = 'sim-total ' + (tgRound > 0 ? 'pos' : tgRound < 0 ? 'neg' : 'zero');
+    document.getElementById('sim-desc').textContent =
+      `${S.days} dernier${S.days > 1 ? 's' : ''} jour${S.days > 1 ? 's' : ''} · ${S.mise.toLocaleString('fr-FR')} €/jour${S.tp ? ' · TP ' + S.tp + '%' : ''}`;
+    document.getElementById('sim-correct').textContent = `${correctCount}/${results.length}`;
+
+    const totalPages = Math.max(1, Math.ceil(results.length / CHIPS_PER_PAGE));
+    S.page = Math.max(1, Math.min(S.page, totalPages));
+    const pageSlice = results.slice((S.page - 1) * CHIPS_PER_PAGE, S.page * CHIPS_PER_PAGE);
+
+    document.getElementById('chips-wrap').innerHTML      = buildChips(pageSlice);
+    document.getElementById('chips-pagination').innerHTML = buildPagination(S.page, totalPages, results.length);
+    document.getElementById('history-tbody').innerHTML   = buildRows(results);
+    updateTableHeader();
+  }
+
+  function buildChips(rows) {
+    if (!rows.length) return '<p style="color:var(--muted);font-size:.8rem">Aucune donnée</p>';
+    return '<div class="chips-grid">' + rows.map(({ h, r }) => {
+      const isWin  = r.gain !== null && r.gain >= 0;
+      const cls    = r.gain === null ? 'pending' : (isWin ? 'win' : 'loss');
+      const posTxt = h.position === 'LONG' ? '↑ Long' : '↓ Short';
+      const typeTxt= r.type === 'tp' ? 'TP ✓' : 'Clôture';
+      const retTxt = h.daily_return !== null ? (h.daily_return >= 0 ? '+' : '') + h.daily_return + '%' : '—';
+      return `<div class="day-chip ${cls}">
+        <div class="chip-date">${h.date.slice(0,5)}</div>
+        <div class="chip-pos">${posTxt}</div>
+        <div class="chip-type ${r.type}">${typeTxt}</div>
+        <div class="chip-gain">${r.gain !== null ? fmtGain(r.gain) : '—'}</div>
+        <div class="chip-ret">${retTxt}</div>
+      </div>`;
+    }).join('') + '</div>';
+  }
+
+  function buildPagination(page, total, count) {
+    if (total <= 1) return '';
+    return `<div class="pagination">
+      <button class="page-btn" onclick="changePage(-1)" ${page <= 1 ? 'disabled' : ''}>← Préc</button>
+      <span class="page-info">Page ${page}/${total} · ${count} jours</span>
+      <button class="page-btn" onclick="changePage(1)"  ${page >= total ? 'disabled' : ''}>Suiv →</button>
+    </div>`;
+  }
+
+  function buildRows(results) {
+    const showTp = S.tp > 0;
+    return results.map(({ h, r }) => {
+      const gainVal = r.gain !== null ? Math.round(r.gain * 100) / 100 : null;
+      const gainCls = gainVal === null ? '' : (gainVal >= 0 ? 'pos' : 'neg');
+      const typeLbl = r.type === 'tp' ? 'TP' : 'Clôture';
+      const typeCol = r.type === 'tp' ? 'tp' : 'eod';
+      return `<tr>
+        <td>${h.date}</td>
+        <td style="color:var(--muted)">${fmtUSD.format(h.close)}</td>
+        <td><span class="tag ${h.predicted_up ? 'up' : 'down'}">${h.predicted_up ? '↑ Hausse' : '↓ Baisse'}</span></td>
+        <td><span class="tag ${h.actual_up ? 'up' : 'down'}">${h.actual_up ? '↑ Hausse' : '↓ Baisse'}</span></td>
+        ${showTp ? `<td><span class="tag ${typeCol}">${typeLbl}</span></td>` : ''}
+        <td class="gain-cell ${gainCls}">${gainVal !== null ? fmtGain(gainVal) : '—'}</td>
+        <td><span class="${h.correct ? 'ok' : 'nok'}">${h.correct ? '✓' : '✗'}</span></td>
+      </tr>`;
+    }).join('') || '<tr><td colspan="7" style="color:var(--muted);text-align:center;padding:20px">Aucune donnée</td></tr>';
+  }
+
+  function updateTableHeader() {
+    const th = document.getElementById('th-tp');
+    if (th) th.style.display = S.tp > 0 ? '' : 'none';
+  }
+
+  // ── Controls — read S to set active classes (persists across model changes) ──
+  function setCtrl(groupId, value, key, activeCls = 'active') {
+    document.querySelectorAll(`#${groupId} .ctrl-btn`).forEach(b => b.classList.remove('active','active-green'));
+    const btn = document.querySelector(`#${groupId} [data-value="${value}"]`);
+    if (btn) btn.classList.add(activeCls);
+    S[key] = Number(value); S.page = 1;
+    renderSim();
+  }
+
+  function changePage(dir) {
+    const totalPages = Math.max(1, Math.ceil(Math.min(S.days, ALL_HISTORY.length) / CHIPS_PER_PAGE));
+    S.page = Math.max(1, Math.min(S.page + dir, totalPages));
+    renderSim();
+  }
+
+  // Re-apply S state to the controls buttons after content rebuild
+  function syncControls() {
+    const apply = (groupId, val, cls) => {
+      document.querySelectorAll(`#${groupId} .ctrl-btn`).forEach(b => b.classList.remove('active','active-green'));
+      const btn = document.querySelector(`#${groupId} [data-value="${val}"]`);
+      if (btn) btn.classList.add(cls);
+    };
+    apply('ctrl-mise', S.mise, 'active');
+    apply('ctrl-tp',   S.tp,   S.tp > 0 ? 'active-green' : 'active');
+    apply('ctrl-days', S.days, 'active');
+  }
+
+  // ── Live price ────────────────────────────────────────────────────────────
+  function updateLivePrice(price) {
+    const priceEl = document.getElementById('live-price-val');
+    const varEl   = document.getElementById('variation-val');
+    const tsEl    = document.getElementById('price-ts');
+    if (!priceEl) return;
+    priceEl.textContent = fmtUSD.format(price);
+    if (YESTERDAY_CLOSE) {
+      const chg = (price - YESTERDAY_CLOSE) / YESTERDAY_CLOSE * 100;
+      if (varEl) { varEl.textContent = (chg >= 0 ? '+' : '') + chg.toFixed(2) + '%'; varEl.className = 'stat-value ' + (chg >= 0 ? 'green' : 'red'); }
+    }
+    if (tsEl) { const now = new Date(); tsEl.textContent = now.toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}); }
+  }
+
+  function startPricePolling() {
+    if (priceInterval) clearInterval(priceInterval);
+    async function tick() {
+      try { const res = await fetch('/api/price'); const d = await res.json(); if (d.status === 'ok') updateLivePrice(d.price); } catch(_) {}
+    }
+    tick();
+    priceInterval = setInterval(tick, 30000);
+  }
+
+  // ── Build page content (called on load + model change) ────────────────────
+  function buildContent(data) {
+    ALL_HISTORY     = data.history;
+    YESTERDAY_CLOSE = data.yesterday_close;
+
+    const isUp  = data.today_signal === 1;
+    const isUnk = data.today_signal === null;
+    const sc    = isUnk ? 'unknown' : (isUp ? 'up' : 'down');
+    const dir   = isUnk ? '?' : (isUp ? '↑' : '↓');
+    const txt   = isUnk ? 'Signal inconnu' : (isUp ? 'Hausse prévue' : 'Baisse prévue');
+    const chg   = data.price_change_pct;
+    const stCls = chg === null ? 'neutral' : (chg >= 0 ? 'green' : 'red');
+    const chgTx = chg !== null ? `${chg >= 0 ? '+' : ''}${chg}%` : '—';
+    const basis = data.signal_basis_date
+      ? `Signal basé sur la clôture du <strong>${data.signal_basis_date}</strong> · Prix du jour non pris en compte`
+      : 'Signal basé sur les données historiques';
+
+    if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+
+    document.getElementById('content').innerHTML = `<div class="wrap">
+
+      <div class="signal-hero ${sc}">
+        <div class="signal-left">
+          <div class="signal-arrow">${dir}</div>
+          <div>
+            <div class="signal-title">${txt}</div>
+            <div class="signal-meta">Prédiction pour le <strong>${data.today_date}</strong><br>${basis}</div>
           </div>
-
-          <!-- Ligne 2 : courbe -->
-          <div class="card">
-            <div class="card-label">Cours — 30 derniers jours</div>
-            <div class="chart-wrap">
-              <canvas id="btcChart"></canvas>
-            </div>
-          </div>
-
-          <!-- Ligne 3 : simulation gains -->
-          <div class="gain-card">
-            <div class="card-label">Simulation — 1 000 € misés par jour</div>
-            <div class="gain-top">
-              <div>
-                <div class="gain-amount ${gainClass}">${fmtGain(totalGain)}</div>
-                <div class="gain-sub">gain net sur les 5 derniers jours · 1 000 € / jour</div>
-              </div>
-              <div class="gain-accuracy">
-                <div class="accuracy-ring">${correctCount}/5</div>
-                <div class="accuracy-label">prédictions correctes</div>
-              </div>
-            </div>
-            <div class="day-chips">${chips}</div>
-          </div>
-
-          <!-- Ligne 4 : historique détaillé -->
-          <div class="card">
-            <div class="card-label">Historique des 5 dernières prédictions</div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Clôture</th>
-                    <th>Prédiction</th>
-                    <th>Réalité</th>
-                    <th>Résultat</th>
-                  </tr>
-                </thead>
-                <tbody>${histRows}</tbody>
-              </table>
-            </div>
-          </div>
-
         </div>
-        <p class="refresh-note">
-          Données rafraîchies toutes les heures · Modèle KNN entraîné sur les données 2018 → aujourd'hui
-        </p>`;
+        ${!isUnk ? `<div class="signal-right">
+          <div class="signal-label-sm">Position suggérée</div>
+          <div class="signal-pos-badge">${isUp ? 'LONG' : 'SHORT'}</div>
+          <div class="signal-acc">Précision test : <strong>${data.test_accuracy}%</strong></div>
+        </div>` : ''}
+      </div>
 
-      // Chart
-      const ctx = document.getElementById('btcChart').getContext('2d');
-      new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: data.chart_dates,
-          datasets: [{
-            data:            data.chart_prices,
-            borderColor:     '#f7931a',
-            borderWidth:     2,
-            pointRadius:     0,
-            tension:         0.3,
-            fill:            true,
-            backgroundColor: 'rgba(247,147,26,.07)',
-          }]
+      <div class="grid g3">
+        <div class="card">
+          <div class="card-label" style="display:flex;justify-content:space-between;align-items:center">
+            Prix actuel <span id="price-ts" style="font-size:.6rem;color:var(--muted2)"></span>
+          </div>
+          <div id="live-price-val" class="stat-value">${fmtUSD.format(data.current_price)}</div>
+          <div class="stat-sub">BTC / USD · cours en direct</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Clôture J−1</div>
+          <div class="stat-value neutral">${data.yesterday_close ? fmtUSD.format(data.yesterday_close) : '—'}</div>
+          <div class="stat-sub">Base du signal de prédiction</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Variation vs J−1</div>
+          <div id="variation-val" class="stat-value ${stCls}">${chgTx}</div>
+          <div class="stat-sub">Cours en direct vs clôture J−1</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-label">Cours BTC/USD — 30 derniers jours</div>
+        <div class="chart-wrap"><canvas id="btcChart"></canvas></div>
+      </div>
+
+      <div class="ctrl-block">
+        <div class="ctrl-row">
+          <span class="ctrl-label">Mise / jour</span>
+          <div class="ctrl-group" id="ctrl-mise">
+            <button class="ctrl-btn" data-value="100"  onclick="setCtrl('ctrl-mise',100,'mise')">100 €</button>
+            <button class="ctrl-btn" data-value="500"  onclick="setCtrl('ctrl-mise',500,'mise')">500 €</button>
+            <button class="ctrl-btn" data-value="1000" onclick="setCtrl('ctrl-mise',1000,'mise')">1 000 €</button>
+            <button class="ctrl-btn" data-value="2000" onclick="setCtrl('ctrl-mise',2000,'mise')">2 000 €</button>
+            <button class="ctrl-btn" data-value="5000" onclick="setCtrl('ctrl-mise',5000,'mise')">5 000 €</button>
+          </div>
+        </div>
+        <div class="ctrl-row">
+          <span class="ctrl-label">Take Profit</span>
+          <div class="ctrl-group" id="ctrl-tp">
+            <button class="ctrl-btn" data-value="0"  onclick="setCtrl('ctrl-tp',0,'tp')">Désactivé</button>
+            <button class="ctrl-btn" data-value="1"  onclick="setCtrl('ctrl-tp',1,'tp','active-green')">1 %</button>
+            <button class="ctrl-btn" data-value="2"  onclick="setCtrl('ctrl-tp',2,'tp','active-green')">2 %</button>
+            <button class="ctrl-btn" data-value="3"  onclick="setCtrl('ctrl-tp',3,'tp','active-green')">3 %</button>
+            <button class="ctrl-btn" data-value="5"  onclick="setCtrl('ctrl-tp',5,'tp','active-green')">5 %</button>
+            <button class="ctrl-btn" data-value="10" onclick="setCtrl('ctrl-tp',10,'tp','active-green')">10 %</button>
+          </div>
+        </div>
+        <div class="ctrl-row">
+          <span class="ctrl-label">Période</span>
+          <div class="ctrl-group" id="ctrl-days">
+            <button class="ctrl-btn" data-value="5"  onclick="setCtrl('ctrl-days',5,'days')">5 j</button>
+            <button class="ctrl-btn" data-value="10" onclick="setCtrl('ctrl-days',10,'days')">10 j</button>
+            <button class="ctrl-btn" data-value="20" onclick="setCtrl('ctrl-days',20,'days')">20 j</button>
+            <button class="ctrl-btn" data-value="30" onclick="setCtrl('ctrl-days',30,'days')">30 j</button>
+            <button class="ctrl-btn" data-value="60" onclick="setCtrl('ctrl-days',60,'days')">60 j</button>
+          </div>
+        </div>
+        <div class="ctrl-note">Take Profit calculé sur le High/Low journalier · Sans TP : résultat basé sur la clôture</div>
+      </div>
+
+      <div class="sim-card">
+        <div class="card-label">Simulation de gains · ${MODEL_LABELS[data.model_name]}</div>
+        <div class="sim-header">
+          <div>
+            <div id="sim-total" class="sim-total zero">+0.00 €</div>
+            <div id="sim-desc" class="sim-desc"></div>
+          </div>
+          <div class="sim-right">
+            <div id="sim-correct" class="acc-number">—</div>
+            <div class="acc-label">prédictions correctes (direction)</div>
+          </div>
+        </div>
+        <div class="divider"></div>
+        <div id="chips-wrap"></div>
+        <div id="chips-pagination"></div>
+      </div>
+
+      <div class="card">
+        <div class="card-label">Historique détaillé · ${MODEL_LABELS[data.model_name]}</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>Date</th><th>Clôture J</th><th>Prédiction</th><th>Réalité</th>
+              <th id="th-tp" style="display:none">Sortie</th>
+              <th>Gain</th><th>Dir.</th>
+            </tr></thead>
+            <tbody id="history-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+    <div class="footer-note">
+      Données : CSV Binance (Kaggle) + extension yfinance · Split chronologique 95/5 · Entraînement 2018 → aujourd'hui<br>
+      Le signal du jour est figé à la clôture de la veille — indépendant du prix intraday
+    </div>`;
+
+    // Chart
+    const ctx  = document.getElementById('btcChart').getContext('2d');
+    const grad = ctx.createLinearGradient(0, 0, 0, 210);
+    grad.addColorStop(0, 'rgba(247,147,26,.18)');
+    grad.addColorStop(1, 'rgba(247,147,26,.00)');
+    chartInstance = new Chart(ctx, {
+      type: 'line',
+      data: { labels: data.chart_dates, datasets: [{
+        data: data.chart_prices, borderColor: '#f7931a', borderWidth: 2,
+        pointRadius: 0, tension: 0.35, fill: true, backgroundColor: grad,
+      }]},
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { display: false },
+          tooltip: { backgroundColor: '#0f1623', borderColor: '#1e2a42', borderWidth: 1, titleColor: '#6b7fa3', bodyColor: '#e8eef8', callbacks: { label: c => '  ' + fmtUSD.format(c.raw) } }
         },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display: false },
-            tooltip: { callbacks: { label: c => ' ' + fmtUSD.format(c.raw) } }
-          },
-          scales: {
-            x: {
-              ticks: { color: '#8b949e', maxTicksLimit: 5, font: { size: 10 } },
-              grid:  { color: '#21262d' },
-            },
-            y: {
-              ticks: {
-                color: '#8b949e', font: { size: 10 },
-                callback: v => '$' + (v >= 1000 ? (v/1000).toFixed(0) + 'k' : v)
-              },
-              grid: { color: '#21262d' },
-            }
-          }
+        scales: {
+          x: { ticks:{color:'#6b7fa3',maxTicksLimit:6,font:{size:10}}, grid:{color:'#1e2a42'}, border:{color:'#1e2a42'} },
+          y: { ticks:{color:'#6b7fa3',font:{size:10},callback:v=>'$'+(v>=1000?(v/1000).toFixed(0)+'k':v)}, grid:{color:'#1e2a42'}, border:{color:'#1e2a42'} }
         }
-      });
+      }
+    });
 
-    } catch (err) {
-      app.innerHTML = `<div class="error-msg"><strong>Erreur :</strong> ${err.message}</div>`;
+    syncControls();  // re-apply S state to the rebuilt controls
+    renderSim();
+    startPricePolling();
+  }
+
+  // ── Model selector ────────────────────────────────────────────────────────
+  async function selectModel(name) {
+    if (name === CURRENT_MODEL) return;
+    CURRENT_MODEL = name;
+    S.page = 1;  // reset pagination only
+
+    document.querySelectorAll('.model-tab').forEach(b => {
+      b.classList.toggle('active', b.dataset.model === name);
+      b.classList.toggle('loading-tab', b.dataset.model !== name);
+    });
+
+    if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
+    if (priceInterval) { clearInterval(priceInterval); priceInterval = null; }
+    document.getElementById('content').innerHTML = `<div class="loading">
+      <div class="spinner"></div>
+      <p>Entraînement du modèle ${MODEL_LABELS[name]}…</p>
+    </div>`;
+
+    try {
+      const res  = await fetch(`/api/prediction?model=${name}`);
+      const data = await res.json();
+      if (data.status !== 'ok') throw new Error(data.message || 'Erreur');
+      const accEl = document.getElementById(`acc-${name}`);
+      if (accEl) accEl.textContent = `Précision test : ${data.test_accuracy}%`;
+      document.querySelectorAll('.model-tab').forEach(b => b.classList.remove('loading-tab'));
+      buildContent(data);
+    } catch(err) {
+      document.querySelectorAll('.model-tab').forEach(b => b.classList.remove('loading-tab'));
+      document.getElementById('content').innerHTML = `<div class="error-msg"><strong>Erreur :</strong> ${err.message}</div>`;
+    }
+  }
+
+  // ── Bootstrap ─────────────────────────────────────────────────────────────
+  async function load() {
+    try {
+      const res  = await fetch('/api/prediction?model=knn');
+      const data = await res.json();
+      if (data.status !== 'ok') throw new Error(data.message || 'Erreur');
+      const accEl = document.getElementById('acc-knn');
+      if (accEl) accEl.textContent = `Précision test : ${data.test_accuracy}%`;
+      buildContent(data);
+    } catch(err) {
+      document.getElementById('content').innerHTML = `<div class="error-msg"><strong>Erreur :</strong> ${err.message}</div>`;
     }
   }
 
