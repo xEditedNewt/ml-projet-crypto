@@ -310,15 +310,28 @@
   let priceInterval   = null;
 
   // S persists: changing model only refreshes the data, not the controls
-  const S = { mise: 1000, tp: 1, sl: 0, days: 5, page: 1 };
+  const S = { mise: 1000, tp: 0, sl: 0, days: 5, page: 1 };
 
-  // ── Gain basé sur la direction close→close uniquement ────────────────────
+  // ── Gain : Take Profit si activé, sinon close→close ──────────────────────
   function computeResult(h) {
-    if (h.next_close === null) return { gain: null };
-    const ret = h.predicted_up
-      ? (h.next_close - h.close) / h.close
-      : (h.close - h.next_close) / h.close;
-    return { gain: S.mise * ret };
+    if (h.next_close === null) return { gain: null, type: 'pending' };
+    const { tp, mise } = S;
+    const entry = h.close;
+
+    if (tp === 0) {
+      const ret = h.predicted_up ? (h.next_close - entry) / entry : (entry - h.next_close) / entry;
+      return { gain: mise * ret, type: 'eod' };
+    }
+
+    if (h.predicted_up) {
+      const tpHit = h.next_high !== null && h.next_high >= entry * (1 + tp / 100);
+      if (tpHit) return { gain: mise * tp / 100, type: 'tp' };
+      return { gain: mise * (h.next_close - entry) / entry, type: 'eod' };
+    } else {
+      const tpHit = h.next_low !== null && h.next_low <= entry * (1 - tp / 100);
+      if (tpHit) return { gain: mise * tp / 100, type: 'tp' };
+      return { gain: mise * (entry - h.next_close) / entry, type: 'eod' };
+    }
   }
 
   // ── Simulation render ─────────────────────────────────────────────────────
@@ -335,7 +348,7 @@
     simTotal.textContent = fmtGain(tgRound);
     simTotal.className   = 'sim-total ' + (tgRound > 0 ? 'pos' : tgRound < 0 ? 'neg' : 'zero');
     document.getElementById('sim-desc').textContent =
-      `${S.days} dernier${S.days > 1 ? 's' : ''} jour${S.days > 1 ? 's' : ''} · ${S.mise.toLocaleString('fr-FR')} €/jour · résultat clôture→clôture`;
+      `${S.days} dernier${S.days > 1 ? 's' : ''} jour${S.days > 1 ? 's' : ''} · ${S.mise.toLocaleString('fr-FR')} €/jour${S.tp ? ' · TP ' + S.tp + '%' : ' · clôture→clôture'}`;
     document.getElementById('sim-correct').textContent = `${correctCount}/${results.length}`;
 
     const totalPages = Math.max(1, Math.ceil(results.length / CHIPS_PER_PAGE));
@@ -354,10 +367,12 @@
       const isWin  = r.gain !== null && r.gain >= 0;
       const cls    = r.gain === null ? 'pending' : (isWin ? 'win' : 'loss');
       const posTxt = h.position === 'LONG' ? '↑ Long' : '↓ Short';
+      const typeTxt= r.type === 'tp' ? 'TP ✓' : 'Clôture';
       const retTxt = h.daily_return !== null ? (h.daily_return >= 0 ? '+' : '') + h.daily_return + '%' : '—';
       return `<div class="day-chip ${cls}">
         <div class="chip-date">${h.date.slice(0,5)}</div>
         <div class="chip-pos">${posTxt}</div>
+        <div class="chip-type ${r.type}">${typeTxt}</div>
         <div class="chip-gain">${r.gain !== null ? fmtGain(r.gain) : '—'}</div>
         <div class="chip-ret">${retTxt}</div>
       </div>`;
@@ -374,23 +389,30 @@
   }
 
   function buildRows(results) {
+    const showTp = S.tp > 0;
     return results.map(({ h, r }) => {
       const gainVal = r.gain !== null ? Math.round(r.gain * 100) / 100 : null;
       const gainCls = gainVal === null ? '' : (gainVal >= 0 ? 'pos' : 'neg');
       const pCls = h.proba >= 65 ? 'strong' : h.proba >= 55 ? 'moderate' : 'weak';
+      const typeLbl = r.type === 'tp' ? 'TP' : 'Clôture';
+      const typeCol = r.type === 'tp' ? 'tp' : 'eod';
       return `<tr>
         <td>${h.date}</td>
         <td style="color:var(--muted)">${fmtUSD.format(h.close)}</td>
         <td><span class="tag ${h.predicted_up ? 'up' : 'down'}">${h.predicted_up ? '↑ Hausse' : '↓ Baisse'}</span></td>
         <td><span class="conf-pct ${pCls}" style="font-size:.78rem">${Number(h.proba).toFixed(3)}%</span></td>
         <td><span class="tag ${h.actual_up ? 'up' : 'down'}">${h.actual_up ? '↑ Hausse' : '↓ Baisse'}</span></td>
+        ${showTp ? `<td><span class="tag ${typeCol}">${typeLbl}</span></td>` : ''}
         <td class="gain-cell ${gainCls}">${gainVal !== null ? fmtGain(gainVal) : '—'}</td>
         <td><span class="${h.correct ? 'ok' : 'nok'}">${h.correct ? '✓' : '✗'}</span></td>
       </tr>`;
-    }).join('') || '<tr><td colspan="6" style="color:var(--muted);text-align:center;padding:20px">Aucune donnée</td></tr>';
+    }).join('') || `<tr><td colspan="${showTp ? 8 : 7}" style="color:var(--muted);text-align:center;padding:20px">Aucune donnée</td></tr>`;
   }
 
-  function updateTableHeader() {}
+  function updateTableHeader() {
+    const th = document.getElementById('th-tp');
+    if (th) th.style.display = S.tp > 0 ? '' : 'none';
+  }
 
   // ── Controls — read S to set active classes (persists across model changes) ──
   function setCtrl(groupId, value, key, activeCls = 'active') {
@@ -409,13 +431,14 @@
 
   // Re-apply S state to the controls buttons after content rebuild
   function syncControls() {
-    const apply = (groupId, val) => {
-      document.querySelectorAll(`#${groupId} .ctrl-btn`).forEach(b => b.classList.remove('active'));
+    const apply = (groupId, val, cls) => {
+      document.querySelectorAll(`#${groupId} .ctrl-btn`).forEach(b => b.classList.remove('active','active-green'));
       const btn = document.querySelector(`#${groupId} [data-value="${val}"]`);
-      if (btn) btn.classList.add('active');
+      if (btn) btn.classList.add(cls);
     };
-    apply('ctrl-mise', S.mise);
-    apply('ctrl-days', S.days);
+    apply('ctrl-mise', S.mise, 'active');
+    apply('ctrl-tp',   S.tp,   S.tp > 0 ? 'active-green' : 'active');
+    apply('ctrl-days', S.days, 'active');
   }
 
   // ── Live price ────────────────────────────────────────────────────────────
@@ -521,7 +544,18 @@
             <button class="ctrl-btn" data-value="5000" onclick="setCtrl('ctrl-mise',5000,'mise')">5 000 €</button>
           </div>
         </div>
-<div class="ctrl-row">
+        <div class="ctrl-row">
+          <span class="ctrl-label">Take Profit</span>
+          <div class="ctrl-group" id="ctrl-tp">
+            <button class="ctrl-btn" data-value="0"  onclick="setCtrl('ctrl-tp',0,'tp')">Désactivé</button>
+            <button class="ctrl-btn" data-value="1"  onclick="setCtrl('ctrl-tp',1,'tp','active-green')">1 %</button>
+            <button class="ctrl-btn" data-value="2"  onclick="setCtrl('ctrl-tp',2,'tp','active-green')">2 %</button>
+            <button class="ctrl-btn" data-value="3"  onclick="setCtrl('ctrl-tp',3,'tp','active-green')">3 %</button>
+            <button class="ctrl-btn" data-value="5"  onclick="setCtrl('ctrl-tp',5,'tp','active-green')">5 %</button>
+            <button class="ctrl-btn" data-value="10" onclick="setCtrl('ctrl-tp',10,'tp','active-green')">10 %</button>
+          </div>
+        </div>
+        <div class="ctrl-row">
           <span class="ctrl-label">Période</span>
           <div class="ctrl-group" id="ctrl-days">
             <button class="ctrl-btn" data-value="5"  onclick="setCtrl('ctrl-days',5,'days')">5 j</button>
@@ -531,7 +565,7 @@
             <button class="ctrl-btn" data-value="60" onclick="setCtrl('ctrl-days',60,'days')">60 j</button>
           </div>
         </div>
-        <div class="ctrl-note">Gains calculés sur le rendement clôture→clôture · LONG si hausse prévue, SHORT si baisse prévue</div>
+        <div class="ctrl-note">Take Profit calculé sur le High/Low journalier · Sans TP : résultat basé sur la clôture</div>
       </div>
 
       <div class="sim-card">
@@ -557,6 +591,7 @@
           <table>
             <thead><tr>
               <th>Date</th><th>Clôture J</th><th>Prédiction</th><th>Confiance</th><th>Réalité</th>
+              <th id="th-tp" style="display:none">Sortie</th>
               <th>Gain</th><th>Dir.</th>
             </tr></thead>
             <tbody id="history-tbody"></tbody>
