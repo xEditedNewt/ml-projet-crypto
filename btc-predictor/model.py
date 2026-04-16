@@ -198,8 +198,9 @@ def predict_today_and_history(df_feat, model, scaler, n_history=60):
     df_known   = df_feat.dropna(subset=FEATURES + ['y'])  # NO reset_index
     hist_slice = df_known.tail(n_history)
 
-    X_hist    = scaler.transform(hist_slice[FEATURES].values)
-    pred_hist = model.predict(X_hist)
+    X_hist      = scaler.transform(hist_slice[FEATURES].values)
+    pred_hist   = model.predict(X_hist)
+    proba_hist  = model.predict_proba(X_hist)   # shape (n, 2) — columns: [P(down), P(up)]
 
     history = []
     for i, (orig_idx, row) in enumerate(hist_slice.iterrows()):
@@ -234,11 +235,13 @@ def predict_today_and_history(df_feat, model, scaler, n_history=60):
             'correct':      int(predicted == int(row['y'])),
             'gain_eur':     gain_eur,
             'position':     'LONG' if predicted == 1 else 'SHORT',
+            'proba':        round(float(proba_hist[i][predicted]) * 100, 3),
         })
 
     # ── Today's signal ──────────────────────────────────────────────────────
     # Uses YESTERDAY's features (iloc[-2]) so today's intraday price has zero
     # influence on the signal — the prediction is fully determined at yesterday's close.
+    today_proba = None
     if len(df_all) < 2:
         today_signal      = None
         signal_basis_date = None
@@ -250,10 +253,12 @@ def predict_today_and_history(df_feat, model, scaler, n_history=60):
         else:
             X_signal          = scaler.transform(signal_row[FEATURES].values)
             today_signal      = int(model.predict(X_signal)[0])
+            today_proba       = round(float(model.predict_proba(X_signal)[0][today_signal]) * 100, 3)
             signal_basis_date = df_all['Date'].iloc[-2].strftime('%d/%m/%Y')
 
     return {
         'today_signal':      today_signal,
+        'today_proba':       today_proba if today_signal is not None else None,
         'signal_basis_date': signal_basis_date,
         'history':           history,
         'chart_dates':       chart_dates,
